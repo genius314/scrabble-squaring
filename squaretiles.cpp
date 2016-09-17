@@ -1,17 +1,18 @@
 /* Here is how the code is produced
   1) Get on an airplane with Android phone
   2) Install 'C++ Compiler IDE' from the Play Store
-  3) Sometimes it is possible to Google for some code snippets but sometimes not. But it is not documented what version of C++ is being written.
-  4) It is very difficult to enter code because extra keystroke attempts are needed to switch between alphabetic, numeric, and symbol
+  3) Sometimes it is possible to Google for some code snippets but sometimes not.
+     But it is not documented what version of C++ is being written.
+  4) It is very difficult to enter code because extra keystroke attempts are needed to switch 
+     between alphabetic, numeric, and symbol
 Therefore the effort was quite heroic. */
-
 
 #include <iostream>
 #include <string>
 #include <cstdlib>
 #include <time.h>  // for random seed
 #include <vector>
-#include <algorithm>
+#include <algorithm> // to sort using vector and algorithm got accomplished only partly
 
 using namespace std;
 
@@ -21,16 +22,13 @@ int gridy[100];  // row, col coords for each tile on board
 
 class Square
 {
+    // represents a 5x5 square, a sub-region of the 15x15 grid.
     public:
        int row; // 0..10
        int col;  // 0..10
-       int cost; // equals tile count in v 0.1
+       int tilecount;
+       int cost;  // would be 25 - tilecount.
 };
-
-bool square_lessthan(Square left, Square right)
-       {
-        return left.cost < right.cost;
-        }
 
 // blah bbbb bbbb bbbbb llll aasas hhhhh
 
@@ -93,26 +91,24 @@ int doCount()
    {
       for (int j=0; j<11; j++)
       {
-         int totalcost = 0;
+         int tcount = 0;
          for (int k=0; k<5;k++)
          {
             for (int m=0; m<5; m++)
             {
                 if (grid[i+k][j+m] !='_')
                 {
-                      totalcost ++; // todo: 5x speedup
+                      tcount ++; // todo: 5x speedup
                 }
            }
         }
-// make a square here
-// It's accumulating an array of all the possible squares, with coordinates i,j of upper left corner, and remembering the tile count it contains
-        Square* sq = all_squares + square_index++;
+// make a 5x5 square here, and add it to the array
+       Square* sq = all_squares + square_index++;
 
         sq->row = i;
-       sq->col = j;
-        sq->cost = totalcost;
-
-// . . . . . . . . . . . . . . . m
+        sq->col = j;
+        sq->tilecount = tcount;
+        sq->cost = 25 - tcount;
 
    // cout <<  totalcost << ' ';
    }
@@ -121,18 +117,19 @@ int doCount()
    return 0;
 }
 
-// This uses bubble sort so the list of 5x5 squares is ordered from lowest cost 
-//  (most tiles in it initially) to highest cost (fewest tiles in it initially).
-// The quantity "cost" in the program may be reversed
+// This uses bubble sort so the list of 5x5 squares is ordered from lowest cost to highest cost.
+// todo: i think a better bubble sort might move the bubble more than 1 spot at a time.
 int doSort() {
-    for (int count=0; count < 121; count++) {
-      for (int p= 0; p< 120; p++) {
-        Square squareone = all_squares[p+1];
-        if (all_squares[p].cost < squareone.cost) {
-           all_squares[p+1] = all_squares[p];
-           all_squares[p] = squareone;
-           //cout <<  squareone.cost << '!';
-   }}}
+  for (int count=0; count < 121; count++) {
+    for (int p= 0; p< 120; p++) {
+      Square low_cost_square = all_squares[p+1];
+      if (all_squares[p].cost < low_cost_square.cost) {
+         all_squares[p+1] = all_squares[p];
+         all_squares[p] = low_cost_square;
+         //cout <<  squareone.cost << '!';
+      }
+    }
+  }
 }
 
 int showGrid() {
@@ -175,10 +172,16 @@ int main(){
 
    showGrid();
 
-// plan
-// v0.1 cost of squaring is number of tiles not in the four squares
-// so maximize the tile count inside them
-// i guess it can start with the four best and gradually relax and iterate exhaustively
+// 
+// v0.1 cost of squaring is number of tiles not in the four squares, so maximize the tile count inside them
+// Work with a list all the possible 5x5 squares, sorted from lowest cost to highest
+// Inspect all combinations of four of those.  Iterate to gradually increase the sum of the four costs ...
+//    Don't look at higher cost solutions til various combinations have been inspected
+//    That cutoff quantity is called "tiles_restart" in the program.
+//    Then all that has to be done is locate a set that does not have overlaps - the first one encountered will be the best answer.
+
+// If the cost function is more complicated then the search will not be so simple, 
+//   because the location of each region will affect the cost amount of itself and the other ones too.
 
     doCount();
 
@@ -199,7 +202,7 @@ int main(){
     int b=a+1;
     int c=b+1;
     int d=c+1;   // start optimistically with the four best squares, but likely they will overlap 
-    int tiles_restart=all_squares[a].cost +all_squares[b].cost + all_squares[c].cost + all_squares[d].cost;
+    int tiles_restart = all_squares[a].cost +all_squares[b].cost + all_squares[c].cost + all_squares[d].cost;
      //cout << "hope for "+tiles_restart;
 
     // it starts out optimistic but it gets overlaps
@@ -222,19 +225,19 @@ int main(){
         //   if we notice we are outside the target then iterate an earlier variable instead.  this is
         //   inefficient but it does work fast enough to enjoy the output
         
-        if (d<120 && tc+all_squares[d+1].cost>= tiles_restart) {
+        if (d<120 && tc+all_squares[d+1].cost <= tiles_restart) {
             d++;
             //cout << 'd';
-         } else if (c < 119 && tb+all_squares[c+1].cost+all_squares[c+2].cost>= tiles_restart){
+         } else if (c < 119 && tb+all_squares[c+1].cost+all_squares[c+2].cost <= tiles_restart){
             c++;
             d= c+1; 
            // cout << 'c';
-         } else if (b<118 && ta + all_squares[b+1].cost + all_squares[b+2].cost+all_squares[b+3].cost >= tiles_restart) {
+         } else if (b<118 && ta + all_squares[b+1].cost + all_squares[b+2].cost+all_squares[b+3].cost <= tiles_restart) {
             b++;
             c=b+1;
             d=c+1;
             //cout << 'b';
-         } else if (a<117 && all_squares[a+1].cost+all_squares[a+2].cost+all_squares[a+3].cost+all_squares[a+4].cost >= tiles_restart ) {
+         } else if (a<117 && all_squares[a+1].cost+all_squares[a+2].cost+all_squares[a+3].cost+all_squares[a+4].cost <= tiles_restart ) {
             a++;
             b=a+1;
             c=b+1;
@@ -245,7 +248,7 @@ int main(){
             b=a+1;
             c=b+1;
             d=c+1;
-            tiles_restart--;
+            tiles_restart++;
             //cout << "Hoping for " << tiles_restart << "\n";
          }
 
@@ -257,13 +260,11 @@ int main(){
  //  cout << "a,b,c,d=" << a << "," << b << "," << c << "," << d << "\n";
     cout << '(' << all_squares[a].row << ',' << all_squares[a].col << ") =" << all_squares[a].cost << " ";
 
-Square* all_tiles = all_squares; // compensate for typo/goof
-
-cout << '(' << all_tiles[b].row << ',' << all_tiles[b].col << ") =" << all_tiles[b].cost << " ";
-cout << '(' << all_tiles[c].row << ',' << all_tiles[c].col << ") =" << all_tiles[d].cost << " ";
-cout << '(' << all_tiles[d].row << ',' << all_tiles[d].col << ") =" << all_tiles[d].cost << " ";
+cout << '(' << all_squares[b].row << ',' << all_squares[b].col << ") =" << all_squares[b].cost << " ";
+cout << '(' << all_squares[c].row << ',' << all_squares[c].col << ") =" << all_squares[d].cost << " ";
+cout << '(' << all_squares[d].row << ',' << all_squares[d].col << ") =" << all_squares[d].cost << " ";
     
-cout << "total tiles to not move is " << all_tiles[a].cost + all_tiles[b].cost + all_tiles[c].cost + all_tiles[d].cost << ".\n";
+cout << "total tiles to move is " << all_squares[a].cost + all_squares[b].cost + all_squares[c].cost + all_squares[d].cost << ".\n";
 
     return 0;
 }
