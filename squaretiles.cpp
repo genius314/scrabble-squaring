@@ -1,4 +1,4 @@
-/* version 0.2
+/* version 0.21
    attempt to optimize version 0.1 just for fun of course.
 */
 
@@ -15,6 +15,10 @@ char grid[15][15]; // the board to square up
 size_t gridx[100];
 size_t gridy[100];  // row, col coords for each tile on board
 
+std::string letters  ("AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOO??PPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ");
+
+
+
 class Square
 {
     // represents a 5x5 square, a sub-region of the 15x15 grid.
@@ -23,26 +27,52 @@ class Square
        size_t col;  // 0..10
        size_t tilecount;
        size_t cost;  // would be 25 - tilecount.
+
 };
+
+// Todo: make this code structure be more professional-like
 
 std::vector<Square> all_squares (121);  // each 5x5 square
 
-std::string letters  ("AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOO??PPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ");
+int square_index = 0;
+
+int addSquare(size_t i, size_t j, size_t tcount) 
+{
+          
+    all_squares[square_index].row = i;
+    all_squares[square_index].col = j;
+    all_squares[square_index].tilecount = tcount;
+    all_squares[square_index].cost = 25 - tcount;
+
+        //cout <<  "Counted " << i << ',' << j << ' ' << tcount << "\n";
+
+    // this line of code makes the program work much better, but i can't remember why.
+    
+    square_index++;
+
+}
+
 
 // Function to randomize the initial position
 int initGrid() {
 
-   time_t seconds;
-   time(&seconds);
-   srand((unsigned int) seconds);
+    time_t seconds;
+    time(&seconds);
+    srand((unsigned int) seconds);
 
 
-    for (size_t i=0; i<15; i++) {
-        for (size_t j=0; j<15; j++) {
+    // this makes the grid all blank
+    for (size_t i=0; i<15; i++) 
+    {
+        for (size_t j=0; j<15; j++) 
+        {
             grid[i][j] = '_';
-    }}
+        }
+    }
 
-  for (size_t i =0; i<100;i++) 
+    // replace 100 of the blank places with a tile
+    // to do speedup, keep a list of the 225 places that have not yet been used, and shrink it to avoid misses
+    for (size_t i =0; i<100;i++) 
     {
         for (char g='.';g == '.';) 
         {
@@ -52,7 +82,7 @@ int initGrid() {
             {
                 g = letters[i];
                 grid[b][c] = g;
-               gridx[i]=b;
+                gridx[i]=b;
                 gridy[i]=c;
              }
         }
@@ -61,57 +91,64 @@ int initGrid() {
    return 0;
 }
 
-// Function to inefficiently determine the cost, given it's the indicator cost function, of moving tiles into any given square
+// count the tiles in the square
 int doCount() 
 {
+
     size_t square_index = 0;
-    for (size_t i=0; i<11; i++)
+    
+    size_t t;          // current count
+    size_t tcount[5];  // five stripes to rotate using mod 5 arithmetic
+    size_t totalcount; // the sum of the stripes
+
+    for (size_t j=0; j < 11; j++)
     {
-        for (size_t j=0; j<11; j++)
+        // cout << "Row " << j << endl;
+
+        // "prime the pump" for this row of 5x5 squares
+	totalcount = 0;
+
+        for (size_t k=0; k<4;k++)
         {
-           size_t tcount = 0;
-           for (size_t k=0; k<5;k++)
-           {
-              for (size_t m=0; m<5; m++)
-              {
-                  if (grid[i+k][j+m] !='_')
-                  {
-                      tcount ++; // todo: 5x speedup
-                  }
-              }
-           }
 
-	// Set up the square in the vector of squares
-           //all_squares[square_index];
-           all_squares[square_index].row = i;
-           all_squares[square_index].col = j;
-           all_squares[square_index].tilecount = tcount;
-           all_squares[square_index].cost = 25 - tcount;
+            t = 0;
+            for (size_t m=0; m<5; m++)
+            {
+                t += (grid[j+m][k] =='_' ? 0 : 1);
+            }
+            tcount[k] = t;
+            totalcount += t;
+            // cout << "...Stripe " << k << ' ' << tcount[k] << ' ' << totalcount << endl;
+        }
 
-           //cout <<  "Counted " << i << ',' << j << ' ' << tcount << "\n";
+	tcount[4] = 0;
 
-           square_index++;
-       }
+        for (size_t i=0; i < 11; i++)
+        {
+            // swap the edge that fell off for the edge that is gained
+
+            size_t k = i + 4;       // new vertical stripe to add up
+            size_t k_swap = k % 5;  // index for tcount
+
+            size_t t_swap = tcount[k_swap];
+
+            t= 0;
+            for (size_t m=0; m<5; m++) {
+                t += (grid[j+m][k] =='_' ? 0 : 1);
+            }
+
+            tcount[k_swap] = t;
+            
+            totalcount += (t - t_swap);
+
+	    // cout << "...Stripe " << k << '+' << t << '-' << t_swap << ' ' << totalcount << endl;            
+           
+            addSquare(j,i,totalcount);
+        }
     }
     
     return 0;
 }
-
-// This uses bubble sort so the list of 5x5 squares is ordered from lowest cost to highest cost.
-// todo: i think a better bubble sort might move the bubble more than 1 spot at a time.
-int doBubbleSort() {
-  for (size_t count=0; count < 121; count++) {
-    for (size_t p= 0; p< 120; p++) {
-      Square low_cost_square = all_squares[p+1];
-      if (all_squares[p].cost < low_cost_square.cost) {
-         all_squares[p+1] = all_squares[p];
-         all_squares[p] = low_cost_square;
-         //cout <<  squareone.cost << '!';
-      }
-    }
-  }
-}
-
 
 bool square_compare(Square sq1, Square sq2) {
     return (sq1.cost < sq2.cost);
@@ -234,14 +271,14 @@ int doSolution() {
 
 int main(){
 
-    cout<<("Squaring Tiles - 0.1 by Kevin Leeds\n"); // Egotizing
+    cout<<("Squaring Tiles - 0.21 by Kevin Leeds\n"); // Egotizing and not keeping the version number in a single location
 
     initGrid();  // randomize
 
     showGrid();
 
 // 
-// v0.1 cost of squaring is number of tiles not in the four squares, so maximize the tile count inside them
+// v0.1-0.21 cost of squaring is number of tiles not in the four squares, so maximize the tile count inside them
 // Work with a list all the possible 5x5 squares, sorted from lowest cost to highest
 // Inspect all combinations of four of those.  Iterate to gradually increase the sum of the four costs ...
 //    Don't look at higher cost solutions til various combinations have been inspected
@@ -259,7 +296,7 @@ int main(){
 
    doSort();
 
-   showSorted();
+   //showSorted();
 
    // do complicated loop to search for best combination of four squares
     // simplified by the fact they don't interact to change each other's cost in v 0.1
